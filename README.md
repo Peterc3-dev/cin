@@ -1,144 +1,137 @@
-# Centralized Inference Network (CIN)
+# Bootstrap Router
 
-**Distributed AI compute with local-first routing and transparent cost optimization.**
-
-## Overview
-
-CIN is a hub-and-spoke mesh network for distributed LLM inference. The system routes queries intelligently between local compute nodes (ThinkCentre, GPD Pocket 4) and cloud APIs (Kimi/Opus), minimizing costs while maintaining capability.
+Distributed inference routing engine for OpenClaw infrastructure.
+Routes queries to ThinkCentre (CPU), GPD Pocket 4 (GPU), or Cloud (Kimi 2.5)
+based on complexity analysis, keyword signals, and adaptive feedback.
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    USER INTERFACE                        │
-│              (Telegram Bot - Single Entry)              │
-└────────────────────────┬────────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────┐
-│                    ROUTER CORE                           │
-│  ┌─────────────┐    ┌──────────┐    ┌────────────────┐  │
-│  │  Classifier │ →  │  Router  │ →  │ Status Display │  │
-│  │  (7B local) │    │ (decision│    │ ⚡ ThinkCentre  │  │
-│  └─────────────┘    │  tree)   │    │ · qwen2.5:7b   │  │
-│                     └────┬─────┘    │ · 1.2s · $0.00 │  │
-│                          │          └────────────────┘  │
-│              ┌───────────┼───────────┐                  │
-│              ▼           ▼           ▼                  │
-│  ┌──────────────┐ ┌──────────┐ ┌──────────────┐        │
-│  │ ThinkCentre  │ │  GPD     │ │ Cloud Kimi   │        │
-│  │ (CPU · 7-8B) │ │(GPU·7-14B)│ │ (Complex)    │        │
-│  │ $0 · ~1-2s   │ │ $0 · ~2-3s │ │ $0.01 · ~2s  │        │
-│  └──────────────┘ └──────────┘ └──────────────┘        │
-└─────────────────────────────────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────┐
-│                  SHELL GHOST MODULE                      │
-│         (Integrated command execution layer)             │
-│  Auto-detect shell intent OR explicit: ghost: command    │
-│  Whitelist · Dry-run · Audit log · No sudo w/o confirm   │
-└─────────────────────────────────────────────────────────┘
+User Query
+    │
+    ▼
+┌───────────────────┐
+│ ComplexityAnalyzer │  ← token count, keywords, sentence depth
+│   (rule-based)    │  ← feedback adjustments from history
+└────────┬──────────┘
+         │
+    ┌────▼────┐
+    │ Router  │
+    └────┬────┘
+         │
+    ┌────┴─────────────────────────┐
+    │            │                 │
+    ▼            ▼                 ▼
+ThinkCentre   GPD Pocket 4     Cloud (Kimi)
+ CPU/7-8B     GPU-Vulkan/7-8B   Moonshot API
+ $0.00        $0.00             $$
+    │            │                 │
+    └────────────┴─────────────────┘
+         │
+    ┌────▼────┐
+    │ Logger  │ → routing-decisions.log
+    └────┬────┘
+         │
+    ┌────▼─────────┐
+    │ Feedback Loop │ ← "that needed cloud" / "overkill"
+    └──────────────┘
 ```
 
-## Key Features
+## Quick Start
 
-### 1. Transparent Routing
-Every response includes cost and routing information:
+```bash
+# Install dependency
+pip install pyyaml requests --break-system-packages
+
+# Health check
+python3 router.py --health
+
+# Route a query
+python3 router.py "summarize this paragraph about magnetism"
+
+# Analyze without generating
+python3 router.py --analyze-only "explain the trade-offs between microservices and monoliths"
+
+# Force a specific node
+python3 router.py --force gpd "debug this Python function"
+
+# Pipe from stdin
+echo "translate this to Spanish" | python3 router.py --stdin
+
+# JSON output
+python3 router.py --json "list the planets"
 ```
-⚡ ThinkCentre · qwen2.5:7b · 1.2s · $0.00
+
+## Dashboard & Reports
+
+```bash
+# Terminal dashboard
+bash visual-feedback.sh dashboard
+
+# Node health
+bash visual-feedback.sh health
+
+# Daily report
+python3 routing-logger.py --report
+
+# Last 10 decisions
+python3 routing-logger.py --tail 10
+
+# All-time stats
+python3 routing-logger.py --stats
+
+# Save report to file
+python3 routing-logger.py --report --save
 ```
 
-### 2. Self-Aware Sub-Agent
-The system knows its limits and communicates confidence:
-- **"I can handle that. Processing..."** (high confidence)
-- **"I can try, but this might need more reasoning. Attempt or escalate?"** (uncertain)
-- **"This requires complex judgment. Escalating to cloud..."** (auto-route)
+## Feedback Loop
 
-### 3. Remote File Access
-Fetch files from home machines while away:
+```bash
+# After a bad local result:
+python3 feedback-loop.py --feedback "that needed cloud" --tier simple
+
+# After cloud was overkill:
+python3 feedback-loop.py --feedback "overkill" --tier cloud
+
+# Check current adjustments
+python3 feedback-loop.py --status
+
+# Reset learned adjustments
+python3 feedback-loop.py --reset
 ```
-User (at work): "Send me my resume from GPD"
-System: SSH via Tailscale → fetch → deliver via Telegram
-Cost: $0
+
+## Deployment on ThinkCentre
+
+```bash
+# Copy to ThinkCentre
+scp -r bootstrap-router/ boo@192.168.12.190:~/bootstrap-router/
+
+# Create required directories
+ssh boo@192.168.12.190 'mkdir -p ~/.openclaw/workspace/{memory,reports}'
+
+# Add to PATH (in ~/.bashrc or ~/.zshrc)
+export PATH="$HOME/bootstrap-router:$PATH"
+alias route='python3 ~/bootstrap-router/router.py'
+alias routedash='bash ~/bootstrap-router/visual-feedback.sh dashboard'
+alias routelog='python3 ~/bootstrap-router/routing-logger.py'
+alias routefb='python3 ~/bootstrap-router/feedback-loop.py'
 ```
 
-### 4. Cost Optimization
-| Route | Cost | Speed | Use Case |
-|-------|------|-------|----------|
-| ThinkCentre 7B | $0 | ~1-2s | File ops, status, simple tasks |
-| GPD 14B | $0 | ~2-3s | Code, analysis, local reasoning |
-| Cloud Kimi | $0.005-0.015 | ~2-3s | Complex reasoning, creativity |
+## File Layout
 
-**Target: 90% local, 10% cloud = 70-85% cost reduction**
+```
+bootstrap-router/
+├── router.py            # Main routing engine
+├── routing-config.yaml  # Thresholds, nodes, keywords
+├── routing-logger.py    # Decision logging & daily reports
+├── feedback-loop.py     # Adaptive threshold learning
+├── visual-feedback.sh   # Phosphor green terminal display
+└── README.md
+```
 
-### 5. Shell Ghost
-Dedicated command execution layer:
-- Auto-detects shell intent from natural language
-- `ghost:` prefix for explicit shell mode
-- Whitelist validation, dry-run for destructive ops
-- Audit logging to `~/.local/share/shell-ghost/`
+## Cloud Relay (TODO)
 
-## Components
-
-### Bootstrap Process
-1. **Setup Phase**: Cloud agents (Kimi/Opus) design and install local sub-agents
-2. **Operation Phase**: Local agents handle routine tasks autonomously
-3. **Escalation**: Cloud only wakes for complex decisions
-
-### Nodes
-- **ThinkCentre (Hub)**: Central coordinator, routing decisions, lightweight inference
-- **GPD Pocket 4 (Compute)**: GPU-accelerated inference, portable node
-- **Cloud (Fallback)**: Complex reasoning, architecture decisions, empathy
-
-### Network
-- Tailscale mesh VPN (encrypted, authenticated)
-- Auto-discovery and joining
-- Graceful degradation (nodes operate independently if coordinator down)
-
-## Economics
-
-### Before CIN
-- Daily API usage: $3-5
-- Monthly: $90-150
-
-### After CIN (Bootstrapped)
-- Local power: ~$0.20/day
-- Cloud (10% of queries): ~$0.30-0.50/day
-- **Total: ~$0.50-0.70/day**
-- **Monthly: ~$15-21**
-
-**Savings: 85-90% cost reduction**
-
-## Status
-
-**Phase 1: Design Complete** ✅
-- Architecture defined
-- Interface designed (transparent routing, status line)
-- Component specifications complete
-
-**Phase 2: Implementation** 🚧
-- Router module (Opus building)
-- Telegram bot interface
-- Shell Ghost integration
-- Systemd service deployment
-
-**Phase 3: Deployment** ⏳
-- ThinkCentre hub setup
-- GPD node auto-join
-- Testing and tuning
-- Documentation
-
-## Philosophy
-
-> "Seamlessness is a luxury for people who don't care about the bill. You care about the bill."
-
-CIN prioritizes **transparency** over seamlessness. You always know when you're burning tokens vs running locally. The system trains you, and you train the system.
-
-## License
-
-MIT — The cathedral is open source.
-
----
-
-*Built for survival, designed for escape.*
+The `_cloud_generate()` method in router.py is a placeholder.
+Wire it to OpenClaw's Kimi 2.5 relay when ready. The router
+will auto-escalate to cloud if local nodes fail, but actual
+cloud generation requires the relay connection.

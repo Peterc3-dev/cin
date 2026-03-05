@@ -1,0 +1,161 @@
+# ═══════════════════════════════════════════════════════════════
+#  BOOTSTRAP ROUTER - Routing Configuration
+#  Distributed Inference Routing for OpenClaw Infrastructure
+# ═══════════════════════════════════════════════════════════════
+
+nodes:
+  thinkcentre:
+    name: "ThinkCentre M70q"
+    host: "192.168.12.190"
+    port: 11434
+    tailscale_ip: null
+    compute: "cpu"
+    models:
+      - name: "qwen2.5:7b"
+        role: "daily-driver"
+        priority: 1
+      - name: "qwen3:8b"
+        role: "reasoning"
+        priority: 2
+      - name: "hermes3:8b"
+        role: "instruction-following"
+        priority: 3
+    max_tokens_comfortable: 2048
+    latency_ceiling_sec: 30
+    tier: "simple"
+
+  gpd:
+    name: "GPD Pocket 4"
+    host: "100.77.212.27"
+    port: 11434
+    tailscale_ip: "100.77.212.27"
+    compute: "gpu-vulkan"
+    models:
+      - name: "qwen2.5:7b"
+        role: "daily-driver"
+        priority: 1
+      - name: "dolphin-llama3:8b"
+        role: "uncensored-creative"
+        priority: 2
+    max_tokens_comfortable: 4096
+    latency_ceiling_sec: 20
+    tier: "complex-local"
+
+  cloud:
+    name: "Kimi 2.5 (Cloud)"
+    endpoint: "moonshot-api"
+    compute: "cloud"
+    models:
+      - name: "kimi-2.5"
+        role: "complex-reasoning"
+        priority: 1
+    max_tokens_comfortable: 8192
+    latency_ceiling_sec: 60
+    tier: "cloud"
+
+# ═══════════════════════════════════════════════════════════════
+#  ROUTING RULES (Rule-Based Decision Tree)
+# ═══════════════════════════════════════════════════════════════
+
+routing_rules:
+  # Token-length heuristic thresholds
+  token_thresholds:
+    simple_max: 150          # queries under this → ThinkCentre
+    complex_local_max: 500   # queries under this → GPD
+    cloud_min: 501           # queries above complex_local_max → Cloud
+
+  # Keyword-based routing signals
+  keywords:
+    simple:
+      - "summarize"
+      - "rewrite"
+      - "translate"
+      - "list"
+      - "define"
+      - "format"
+      - "extract"
+      - "convert"
+      - "rename"
+      - "short"
+    complex_local:
+      - "analyze"
+      - "compare"
+      - "debug"
+      - "refactor"
+      - "explain why"
+      - "write code"
+      - "review"
+      - "design"
+    cloud_escalation:
+      - "architecture"
+      - "multi-step"
+      - "research"
+      - "long-form"
+      - "creative writing"
+      - "philosophy"
+      - "strategy"
+      - "deep dive"
+      - "comprehensive"
+
+  # Task-type classification
+  task_types:
+    transformation:
+      tier: "simple"
+      description: "Reformatting, converting, extracting — no reasoning needed"
+    reasoning:
+      tier: "complex-local"
+      description: "Analysis, comparison, debugging — moderate reasoning"
+    creative:
+      tier: "cloud"
+      description: "Voice, personality, idiomatic, long-form — needs cloud quality"
+    system:
+      tier: "simple"
+      description: "System commands, file ops, status checks"
+
+  # Escalation rules
+  escalation:
+    on_local_failure: true
+    on_quality_flag: true       # "that needed cloud" trigger
+    on_timeout: true
+    max_retries_per_tier: 2
+    cooldown_after_failure_sec: 60
+
+# ═══════════════════════════════════════════════════════════════
+#  FEEDBACK LOOP CONFIG
+# ═══════════════════════════════════════════════════════════════
+
+feedback:
+  trigger_phrases:
+    escalate:
+      - "that needed cloud"
+      - "not good enough"
+      - "try cloud"
+      - "escalate"
+    demote:
+      - "overkill"
+      - "could have been local"
+      - "too slow"
+  learning_weight: 0.1          # how much each feedback adjusts thresholds
+  min_samples_before_adjust: 5  # need N feedbacks before auto-adjusting
+
+# ═══════════════════════════════════════════════════════════════
+#  PATHS
+# ═══════════════════════════════════════════════════════════════
+
+paths:
+  routing_rules_md: "~/.openclaw/workspace/memory/model-routing.md"
+  routing_log: "~/.openclaw/workspace/reports/routing-decisions.log"
+  daily_report_dir: "~/.openclaw/workspace/reports/"
+  feedback_db: "~/.openclaw/workspace/memory/routing-feedback.json"
+  budget_tracker: "~/.openclaw/workspace/reports/budget.json"
+
+# ═══════════════════════════════════════════════════════════════
+#  DISPLAY
+# ═══════════════════════════════════════════════════════════════
+
+display:
+  phosphor_green: "#33ff66"
+  ansi_green: "\033[38;2;51;255;102m"
+  ansi_dim: "\033[2m"
+  ansi_bold: "\033[1m"
+  ansi_reset: "\033[0m"
